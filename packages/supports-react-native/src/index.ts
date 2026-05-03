@@ -1,0 +1,26 @@
+// Public API for @postpaddy/supports-react-native.
+//
+// Two layers:
+//   • Headless:  createSupportsClient(), useSupports(), useConversation()
+//   • UI:        <SupportsChat /> drop-in screen
+//
+// Everything talks to the same Postpaddy Supports backend the web widget uses,
+// so the API contract is shared across all SDKs (RN, iOS, Android).
+export { createSupportsClient } from "./client";
+export type {
+  SupportsClient,
+  SupportsClientOptions,
+  WidgetConfig,
+  StartConversationInput,
+  IdentifyInput,
+  Conversation,
+  Message,
+  Attachment,
+  AttachmentInput,
+  RealtimeUnsubscribe,
+} from "./types";
+
+export { SupportsProvider, useSupports } from "./SupportsProvider";
+export { useConversation } from "./useConversation";
+export { SupportsChat } from "./SupportsChat";
+export type { SupportsChatTheme, SupportsChatProps } from "./SupportsChat";

@@ -1,0 +1,40 @@
+{
+  "name": "@postpaddy/supports-react-native",
+  "version": "0.1.0",
+  "description": "React Native SDK for Postpaddy Supports — chat, attachments, realtime.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "dist",
+    "src",
+    "ios",
+    "android",
+    "*.podspec",
+    "react-native.config.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run clean && npm run build"
+  },
+  "keywords": ["postpaddy", "supports", "chat", "support", "react-native"],
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.71",
+    "@supabase/supabase-js": ">=2.45.0"
+  },
+  "peerDependenciesMeta": {
+    "@supabase/supabase-js": { "optional": true }
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
