@@ -12,20 +12,24 @@ import type {
   Attachment,
   RealtimeUnsubscribe,
 } from "./types";
-import { createMemoryStorage } from "./storage";
+import { createDefaultStorage } from "./storage";
+import { SUPPORTS_SUPABASE_ANON_KEY, SUPPORTS_SUPABASE_URL } from "./config";
 
 const TOKEN_KEY = "postpaddy:supports:contact_token";
 const VUID_KEY = "postpaddy:supports:visitor_uid";
 
 export function createSupportsClient(opts: SupportsClientOptions): SupportsClient {
-  const storage = opts.storage ?? createMemoryStorage();
+  if (!opts?.widgetId) throw new Error("createSupportsClient: `widgetId` is required");
+  const storage = opts.storage ?? createDefaultStorage();
   const fetchImpl = opts.fetch ?? fetch;
-  const fnBase = `${opts.supabaseUrl.replace(/\/$/, "")}/functions/v1`;
+  const supabaseUrl = (opts.supabaseUrl ?? SUPPORTS_SUPABASE_URL).replace(/\/$/, "");
+  const supabaseAnonKey = opts.supabaseAnonKey ?? SUPPORTS_SUPABASE_ANON_KEY;
+  const fnBase = `${supabaseUrl}/functions/v1`;
 
   const baseHeaders: Record<string, string> = {
     "content-type": "application/json",
-    apikey: opts.supabaseAnonKey,
-    Authorization: `Bearer ${opts.supabaseAnonKey}`,
+    apikey: supabaseAnonKey,
+    Authorization: `Bearer ${supabaseAnonKey}`,
   };
 
   async function call<T>(path: string, body: unknown, extraHeaders?: Record<string, string>): Promise<T> {
@@ -95,7 +99,7 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
     if (_supabase) return _supabase;
     try {
       const mod = await import("@supabase/supabase-js");
-      _supabase = mod.createClient(opts.supabaseUrl, opts.supabaseAnonKey, {
+      _supabase = mod.createClient(supabaseUrl, supabaseAnonKey, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
       return _supabase;

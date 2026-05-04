@@ -1,38 +1,34 @@
 # @postpaddy/supports-react-native
 
-React Native SDK for **Postpaddy Supports** — chat with your customers (and the AI assistant) from inside any React Native app. Same backend the web widget uses.
+React Native SDK for **Postpaddy Supports** — drop-in customer chat (with the
+AI assistant + human handoff) for any React Native app. Same backend as the
+Postpaddy web widget.
 
 ## Install
 
 ```sh
 npm i @postpaddy/supports-react-native
-# Required for realtime + recommended for storage
-npm i @supabase/supabase-js @react-native-async-storage/async-storage
+```
+
+That's it. AsyncStorage is bundled. Optional extras:
+
+```sh
+# realtime live updates (recommended)
+npm i @supabase/supabase-js
+# built-in image/video picker helpers
+npx expo install expo-image-picker
 ```
 
 ## Quick start
 
 ```tsx
-import {
-  SupportsProvider,
-  SupportsChat,
-  asyncStorageAdapter,
-} from "@postpaddy/supports-react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const options = {
-  widgetId: "wgt_xxx",
-  supabaseUrl: "https://YOUR_PROJECT.supabase.co",
-  supabaseAnonKey: "eyJ...",
-  storage: asyncStorageAdapter(AsyncStorage),
-};
+import { SupportsProvider, SupportsChat } from "@postpaddy/supports-react-native";
 
 export default function App() {
   return (
-    <SupportsProvider options={options}>
+    <SupportsProvider options={{ widgetId: "wgt_xxx" }}>
       <SupportsChat
         identity={{ name: "Ada", email: "ada@example.com" }}
-        onPickAttachment={pickFromImagePicker}
         theme={{ primary: "#1f2bff" }}
       />
     </SupportsProvider>
@@ -40,43 +36,27 @@ export default function App() {
 }
 ```
 
-`onPickAttachment` is your hook to call `expo-image-picker` /
-`react-native-image-picker`. It must return `{ uri, mime, kind, size_bytes }[]`
-where `uri` is a local `file://`. **For iOS HEIC photos, convert to JPEG
-before passing them in** — Android/web cannot decode HEIC.
+That's the whole integration. **Only `widgetId` is required.** Identity is
+optional — pass any combination of `{ name, email, phone, external_user_id }`
+when you want to attach the chat to a known user.
 
-```ts
-import * as ImagePicker from "expo-image-picker";
-import * as ImageManipulator from "expo-image-manipulator";
+If you need to point the SDK at a different Supports backend or wire storage
+explicitly, `SupportsProvider` and `createSupportsClient()` also accept
+optional `supabaseUrl`, `supabaseAnonKey`, and `storage` overrides.
 
-async function pickFromImagePicker() {
-  const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.85 });
-  if (r.canceled || !r.assets?.length) return null;
-  return Promise.all(r.assets.map(async (a) => {
-    let uri = a.uri, mime = a.mimeType ?? (a.type === "video" ? "video/mp4" : "image/jpeg");
-    if (mime === "image/heic" || mime === "image/heif") {
-      const out = await ImageManipulator.manipulateAsync(uri, [], {
-        format: ImageManipulator.SaveFormat.JPEG, compress: 0.85,
-      });
-      uri = out.uri; mime = "image/jpeg";
-    }
-    return {
-      uri, mime,
-      kind: a.type === "video" ? "video" as const : "image" as const,
-      size_bytes: a.fileSize ?? 0,
-      width: a.width, height: a.height,
-      duration_ms: a.duration ?? undefined,
-    };
-  }));
-}
-```
+### Why no API keys?
+
+The SDK ships with the Postpaddy backend URL baked in. Like Intercom, Crisp,
+and HelpScout's mobile SDKs, you only ever provide your **widget id**. All
+auth happens server-side via short-lived visitor tokens scoped to your widget,
+and Row-Level Security prevents any cross-tenant access.
 
 ## Headless usage
 
 ```ts
 import { createSupportsClient } from "@postpaddy/supports-react-native";
 
-const client = createSupportsClient(options);
+const client = createSupportsClient({ widgetId: "wgt_xxx" });
 await client.identify({ name: "Ada", email: "ada@example.com" });
 const { visitorToken, conversation } = await client.startConversation();
 const { messages } = await client.loadHistory(visitorToken);
@@ -97,6 +77,54 @@ await client.sendMessage({ visitorToken, text: "Hi!" });
 | `setLanguage(token, lang)` | `POST /widget-set-language` |
 | `subscribeMessages(convId, cb)` | Realtime `messages` table filtered by conversation |
 | `reset()` | Clears stored `contact_token` + `visitor_uid` |
+
+## Optional: built-in image picker
+
+The SDK ships convenience helpers that wrap `expo-image-picker`. Install it in
+your app to use them (it's an *optional* peer dep):
+
+```bash
+npx expo install expo-image-picker
+```
+
+```tsx
+import {
+  useConversation,
+  pickAndSendImage,
+  captureAndSend,
+  pickAndSendVideo,
+} from "@postpaddy/supports-react-native";
+
+function Composer() {
+  const { send } = useConversation();
+  return (
+    <>
+      <Button title="Photo" onPress={() => pickAndSendImage({ send, text: "" })} />
+      <Button title="Camera" onPress={() => captureAndSend({ send, kind: "image" })} />
+      <Button title="Video" onPress={() => pickAndSendVideo({ send })} />
+    </>
+  );
+}
+```
+
+Lower-level helpers (`pickImage`, `pickVideo`, `captureFromCamera`) return
+`AttachmentInput[]` you can pass to `client.sendMessage({ ..., attachments })`
+yourself if you want to preview before sending. All helpers handle permission
+prompts and convert picker results (uri/mime/width/height/duration/size) into
+the SDK's attachment shape.
+
+If your app prefers to supply its own storage adapter, you can also export one
+from `@react-native-async-storage/async-storage`:
+
+```ts
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { asyncStorageAdapter, createSupportsClient } from "@postpaddy/supports-react-native";
+
+const client = createSupportsClient({
+  widgetId: "wgt_xxx",
+  storage: asyncStorageAdapter(AsyncStorage),
+});
+```
 
 The full backend contract is documented in
 [`docs/postpaddy-mobile-spec.md`](../../docs/postpaddy-mobile-spec.md) and the
