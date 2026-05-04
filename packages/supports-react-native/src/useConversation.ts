@@ -22,6 +22,7 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
   const visitorTokenRef = useRef<string | null>(null);
 
   const upsertMessage = useCallback((m: Message) => {
+    if (!m || typeof m.id !== "string") return;
     setState(s => {
       const idx = s.messages.findIndex(x => x.id === m.id);
       if (idx === -1) return { ...s, messages: [...s.messages, m] };
@@ -47,7 +48,7 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
         setState({
           loading: false, sending: false, error: null,
           conversation: { ...opened.conversation, id: hist.conversation_id },
-          messages: hist.messages ?? [],
+          messages: (hist.messages ?? []).filter((m): m is Message => !!m && typeof m.id === "string"),
         });
         unsub = client.subscribeMessages(hist.conversation_id, (m) => upsertMessage(m));
       } catch (e: any) {

@@ -86,7 +86,7 @@ export function SupportsChat({
       ) : (
         <FlatList
           ref={listRef}
-          data={messages}
+          data={messages.filter((m): m is Message => !!m && typeof m.id === "string")}
           keyExtractor={m => m.id}
           contentContainerStyle={{ padding: 12, gap: 8 }}
           renderItem={({ item }) => <Bubble m={item} theme={t} />}
