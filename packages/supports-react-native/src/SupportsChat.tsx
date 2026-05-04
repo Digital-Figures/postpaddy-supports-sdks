@@ -5,11 +5,26 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator,
-  Image, StyleSheet, KeyboardAvoidingView, Platform, type ViewStyle,
+  Image, StyleSheet, KeyboardAvoidingView, Platform, Modal, Linking, type ViewStyle,
 } from "react-native";
 import { SUPPORTS_SUPABASE_URL } from "./config";
 import { useConversation } from "./useConversation";
 import type { AttachmentInput, Message, StartConversationInput } from "./types";
+
+let ExpoVideo: any = null;
+let ExpoVideoResizeMode: any = "contain";
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const av = require("expo-av");
+  ExpoVideo = av?.Video ?? null;
+  ExpoVideoResizeMode = av?.ResizeMode?.CONTAIN ?? "contain";
+} catch {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const v = require("expo-video");
+    ExpoVideo = v?.VideoView ?? v?.Video ?? null;
+  } catch { /* optional dependency not installed */ }
+}
 
 export type SupportsChatTheme = {
   background?: string;
@@ -60,6 +75,7 @@ export function SupportsChat({
   const { loading, sending, error, messages, send } = useConversation(initial);
   const [text, setText] = useState("");
   const [pending, setPending] = useState<AttachmentInput[]>([]);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
 
   useEffect(() => {
@@ -95,7 +111,7 @@ export function SupportsChat({
           data={messages.filter((m): m is Message => !!m && typeof m.id === "string")}
           keyExtractor={m => m.id}
           contentContainerStyle={{ padding: 12, gap: 8 }}
-          renderItem={({ item }) => <Bubble m={item} theme={t} />}
+          renderItem={({ item }) => <Bubble m={item} theme={t} onOpenImage={setPreviewUrl} />}
         />
       )}
 
@@ -145,11 +161,35 @@ export function SupportsChat({
           <Text style={{ color: t.primaryText, fontWeight: "600" }}>{sending ? "…" : "Send"}</Text>
         </TouchableOpacity>
       </View>
+      <Modal
+        visible={!!previewUrl}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewUrl(null)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setPreviewUrl(null)}
+          style={styles.previewBackdrop}
+        >
+          {previewUrl ? (
+            <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />
+          ) : null}
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
-function Bubble({ m, theme }: { m: Message; theme: Required<SupportsChatTheme> }) {
+function Bubble({
+  m,
+  theme,
+  onOpenImage,
+}: {
+  m: Message;
+  theme: Required<SupportsChatTheme>;
+  onOpenImage: (url: string) => void;
+}) {
   const mine = m.sender === "customer";
   const bg = mine ? theme.primary : theme.bubbleIncoming;
   const fg = mine ? theme.primaryText : theme.bubbleIncomingText;
@@ -179,15 +219,29 @@ function Bubble({ m, theme }: { m: Message; theme: Required<SupportsChatTheme> }
       {atts.map((a, i) => (
         <View key={i} style={{ marginTop: 4 }}>
           {a.kind === "image" ? (
-            <Image
-              source={{ uri: mediaSrc(a.url) }}
-              style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: theme.surface }}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.videoBubble, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Text style={{ color: theme.mutedText, fontSize: 12 }}>▶ Video attachment</Text>
+            <TouchableOpacity activeOpacity={0.9} onPress={() => onOpenImage(mediaSrc(a.url))}>
+              <Image
+                source={{ uri: mediaSrc(a.url) }}
+                style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: theme.surface }}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          ) : ExpoVideo ? (
+            <View style={{ width: 220, height: 220, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" }}>
+              <ExpoVideo
+                source={{ uri: mediaSrc(a.url) }}
+                style={{ width: "100%", height: "100%" }}
+                useNativeControls
+                resizeMode={ExpoVideoResizeMode}
+              />
             </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => Linking.openURL(mediaSrc(a.url)).catch(() => {})}
+              style={[styles.videoBubble, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            >
+              <Text style={{ color: theme.mutedText, fontSize: 12 }}>▶ Video attachment</Text>
+            </TouchableOpacity>
           )}
         </View>
       ))}
@@ -208,4 +262,6 @@ const styles = StyleSheet.create({
   videoBadge: { width: 56, height: 56, alignItems: "center", justifyContent: "center" },
   removeBtn: { position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 10, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center" },
   errorBar: { padding: 8 },
+  previewBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center", padding: 16 },
+  previewImage: { width: "100%", height: "100%" },
 });

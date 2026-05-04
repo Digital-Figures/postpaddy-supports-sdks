@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator,
-  Image, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Linking, type ViewStyle,
+  Image, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Linking, Modal, type ViewStyle,
 } from "react-native";
 
 // Optional video player. Apps that install `expo-av` (or `expo-video`) get an
@@ -111,6 +111,7 @@ export function SupportsMessenger({
   const [loadingChat, setLoadingChat] = useState(false);
   const [pending, setPending] = useState<AttachmentInput[]>([]);
   const [text, setText] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
 
   // Bootstrap: fetch brand config + load past conversations if any.
@@ -416,7 +417,15 @@ export function SupportsMessenger({
                   keyExtractor={m => m.id}
                   contentContainerStyle={{ padding: 12, gap: 10, backgroundColor: t.surface, flexGrow: 1 }}
                   style={{ backgroundColor: t.surface }}
-                  renderItem={({ item }) => <Bubble m={item} theme={t} accent={accent} assistantName={config?.assistant_name ?? null} />}
+                  renderItem={({ item }) => (
+                    <Bubble
+                      m={item}
+                      theme={t}
+                      accent={accent}
+                      assistantName={config?.assistant_name ?? null}
+                      onOpenImage={setPreviewUrl}
+                    />
+                  )}
                 />
               )}
 
@@ -485,6 +494,22 @@ export function SupportsMessenger({
           </View>
         </KeyboardAvoidingView>
       )}
+      <Modal
+        visible={!!previewUrl}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewUrl(null)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setPreviewUrl(null)}
+          style={styles.previewBackdrop}
+        >
+          {previewUrl ? (
+            <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />
+          ) : null}
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -523,8 +548,8 @@ function TabButton({ label, icon, active, accent, muted, onPress }: {
   );
 }
 
-function Bubble({ m, theme: t, accent, assistantName }: {
-  m: Message; theme: Required<SupportsMessengerTheme>; accent: string; assistantName: string | null;
+function Bubble({ m, theme: t, accent, assistantName, onOpenImage }: {
+  m: Message; theme: Required<SupportsMessengerTheme>; accent: string; assistantName: string | null; onOpenImage: (url: string) => void;
 }) {
   if (m.sender === "system") {
     return (
@@ -574,7 +599,9 @@ function Bubble({ m, theme: t, accent, assistantName }: {
       {atts.map((a, i) => (
         <View key={i} style={{ marginTop: 6 }}>
           {a.kind === "image" ? (
-            <Image source={{ uri: mediaSrc(a.url) }} style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: t.surface }} resizeMode="cover" />
+            <TouchableOpacity activeOpacity={0.9} onPress={() => onOpenImage(mediaSrc(a.url))}>
+              <Image source={{ uri: mediaSrc(a.url) }} style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: t.surface }} resizeMode="cover" />
+            </TouchableOpacity>
           ) : ExpoVideo ? (
             <View style={{ width: 220, height: 220, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" }}>
               <ExpoVideo
@@ -628,4 +655,6 @@ const styles = StyleSheet.create({
   tabbar: { flexDirection: "row", borderTopWidth: 1 },
   tabBtn: { flex: 1, alignItems: "center", paddingVertical: 10 },
   videoBubbleSpacer: { height: 8 },
+  previewBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center", padding: 16 },
+  previewImage: { width: "100%", height: "100%" },
 });
