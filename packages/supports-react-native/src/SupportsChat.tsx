@@ -86,7 +86,7 @@ export function SupportsChat({
       ) : (
         <FlatList
           ref={listRef}
-          data={messages}
+          data={messages.filter((m): m is Message => !!m && typeof m.id === "string")}
           keyExtractor={m => m.id}
           contentContainerStyle={{ padding: 12, gap: 8 }}
           renderItem={({ item }) => <Bubble m={item} theme={t} />}
@@ -148,7 +148,15 @@ function Bubble({ m, theme }: { m: Message; theme: Required<SupportsChatTheme> }
   const bg = mine ? theme.primary : theme.bubbleIncoming;
   const fg = mine ? theme.primaryText : theme.bubbleIncomingText;
   const align: ViewStyle = { alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "85%" };
-  const atts = m.metadata?.attachments ?? [];
+  // Backend stores attachments either in metadata.attachments[] or, for legacy
+  // single-file messages, in m.attachment_url. Surface both.
+  let atts: Array<{ kind: "image" | "video"; url: string; mime?: string }> =
+    (m.metadata?.attachments as any[] | undefined) ?? [];
+  if (!atts.length && m.attachment_url) {
+    const lower = m.attachment_url.split("?")[0].toLowerCase();
+    const isVideo = /\.(mp4|mov|webm|m4v|avi|mkv)$/.test(lower);
+    atts = [{ kind: isVideo ? "video" : "image", url: m.attachment_url }];
+  }
 
   return (
     <View style={align}>
