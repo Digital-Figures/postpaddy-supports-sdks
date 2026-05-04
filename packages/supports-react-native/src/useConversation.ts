@@ -22,7 +22,6 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
   const visitorTokenRef = useRef<string | null>(null);
 
   const upsertMessage = useCallback((m: Message) => {
-    if (!m || typeof m.id !== "string") return;
     setState(s => {
       const idx = s.messages.findIndex(x => x.id === m.id);
       if (idx === -1) return { ...s, messages: [...s.messages, m] };
@@ -48,7 +47,7 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
         setState({
           loading: false, sending: false, error: null,
           conversation: { ...opened.conversation, id: hist.conversation_id },
-          messages: (hist.messages ?? []).filter((m): m is Message => !!m && typeof m.id === "string"),
+          messages: hist.messages ?? [],
         });
         unsub = client.subscribeMessages(hist.conversation_id, (m) => upsertMessage(m));
       } catch (e: any) {
@@ -66,16 +65,15 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
     if (!tok) throw new Error("Conversation not ready");
     setState(s => ({ ...s, sending: true, error: null }));
     try {
-      // Backend doesn't echo the persisted rows — both the visitor message
-      // and the AI reply arrive via subscribeMessages() (realtime).
-      await client.sendMessage({ visitorToken: tok, text, attachments });
+      const { message } = await client.sendMessage({ visitorToken: tok, text, attachments });
+      upsertMessage(message);
     } catch (e: any) {
       setState(s => ({ ...s, error: e?.message ?? String(e) }));
       throw e;
     } finally {
       setState(s => ({ ...s, sending: false }));
     }
-  }, [client]);
+  }, [client, upsertMessage]);
 
   const setLanguage = useCallback(async (lang: string) => {
     const tok = visitorTokenRef.current;

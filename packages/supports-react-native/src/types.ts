@@ -2,30 +2,16 @@
 // If you change a field here, make the corresponding edge-function change too.
 
 export type SupportsClientOptions = {
-  /** Postpaddy widget id (from your dashboard). The ONLY required option. */
+  /** Postpaddy widget id (created in the dashboard, public-safe). */
   widgetId: string;
-  /**
-   * Optional storage override. Defaults to AsyncStorage on RN (bundled),
-   * falls back to in-memory if AsyncStorage isn't available.
-   */
+  /** Supabase project URL — e.g. https://<ref>.supabase.co. Public-safe. */
+  supabaseUrl: string;
+  /** Supabase publishable/anon key — public-safe. */
+  supabaseAnonKey: string;
+  /** Persistence adapter for the visitor's `contact_token`. Defaults to in-memory. */
   storage?: SupportsStorage;
-  /** Optional fetch override (polyfill, telemetry, custom timeouts). */
+  /** Optional override for fetch (e.g. polyfill, telemetry). */
   fetch?: typeof fetch;
-  /**
-   * Optional default language code (e.g. "en", "fr", "es"). When set, new
-   * conversations start in this language and the AI/agent's replies are
-   * translated for the visitor automatically. Visitors can change it later
-   * via setLanguage().
-   */
-  defaultLanguage?: string;
-};
-
-export type WidgetTicket = {
-  id: string;
-  ticket_number: string;
-  subject: string;
-  status: string;
-  created_at: string;
 };
 
 export interface SupportsStorage {
@@ -99,9 +85,6 @@ export type Conversation = {
   status?: string | null;
   visitor_language?: string | null;
   last_message_at?: string | null;
-  summary?: string | null;
-  is_escalated?: boolean;
-  preview?: { content: string | null; sender: string; created_at: string } | null;
 };
 
 export type RealtimeUnsubscribe = () => void;
@@ -119,22 +102,14 @@ export interface SupportsClient {
   openConversation(conversationId: string): Promise<{ conversation: Conversation; visitorToken: string }>;
   /** List the visitor's past conversations (requires identify()). */
   listConversations(): Promise<Conversation[]>;
-  /** List the visitor's tickets (requires an active visitor token). */
-  listTickets(visitorToken: string): Promise<{ tickets: WidgetTicket[]; visible: boolean }>;
   /** Load full message history for a conversation. */
   loadHistory(visitorToken: string): Promise<{ conversation_id: string; messages: Message[] }>;
-  /**
-   * Send a message (text and/or attachments). Local file URIs are uploaded first.
-   *
-   * NOTE: The persisted visitor message and the AI reply are NOT returned here.
-   * They arrive via `subscribeMessages()` (realtime). This call only returns
-   * the AI's reply text (if any) and whether the conversation was escalated.
-   */
+  /** Send a message (text and/or attachments). Local file URIs are uploaded first. */
   sendMessage(args: {
     visitorToken: string;
     text?: string;
     attachments?: AttachmentInput[];
-  }): Promise<{ reply: string | null; escalated: boolean }>;
+  }): Promise<{ message: Message; aiMessage?: Message | null }>;
   /** Set the visitor's preferred language for a conversation. */
   setLanguage(visitorToken: string, language: string): Promise<void>;
   /** Subscribe to realtime message inserts/updates for a conversation. */
