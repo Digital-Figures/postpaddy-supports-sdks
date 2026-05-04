@@ -1,6 +1,6 @@
 {
   "name": "@postpaddy/supports-react-native",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "React Native SDK for Postpaddy Supports — chat, attachments, realtime. Drop-in: just your widget id.",
   "main": "src/index.ts",
   "types": "src/index.ts",

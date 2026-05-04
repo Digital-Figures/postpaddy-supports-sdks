@@ -7,6 +7,7 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator,
   Image, StyleSheet, KeyboardAvoidingView, Platform, type ViewStyle,
 } from "react-native";
+import { SUPPORTS_SUPABASE_URL } from "./config";
 import { useConversation } from "./useConversation";
 import type { AttachmentInput, Message, StartConversationInput } from "./types";
 
@@ -33,6 +34,11 @@ const defaultTheme: Required<SupportsChatTheme> = {
   bubbleIncoming: "#f1f5f9",
   bubbleIncomingText: "#0f172a",
 };
+
+function mediaSrc(url: string): string {
+  if (!/^https?:\/\//i.test(url)) return url;
+  return `${SUPPORTS_SUPABASE_URL}/functions/v1/chat-media?url=${encodeURIComponent(url)}`;
+}
 
 export type SupportsChatProps = {
   /** Resume a specific conversation. Otherwise a new one is started. */
@@ -174,7 +180,7 @@ function Bubble({ m, theme }: { m: Message; theme: Required<SupportsChatTheme> }
         <View key={i} style={{ marginTop: 4 }}>
           {a.kind === "image" ? (
             <Image
-              source={{ uri: a.url }}
+              source={{ uri: mediaSrc(a.url) }}
               style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: theme.surface }}
               resizeMode="cover"
             />

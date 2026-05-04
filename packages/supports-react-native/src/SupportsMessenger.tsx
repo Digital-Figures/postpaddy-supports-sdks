@@ -29,6 +29,7 @@ try {
   } catch { /* not installed — that's fine */ }
 }
 import { useSupports } from "./SupportsProvider";
+import { SUPPORTS_SUPABASE_URL } from "./config";
 import type {
   AttachmentInput, Conversation, Message, StartConversationInput,
   WidgetConfig, WidgetTicket,
@@ -84,6 +85,11 @@ function relativeTime(iso?: string | null) {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return new Date(iso).toLocaleDateString();
+}
+
+function mediaSrc(url: string): string {
+  if (!/^https?:\/\//i.test(url)) return url;
+  return `${SUPPORTS_SUPABASE_URL}/functions/v1/chat-media?url=${encodeURIComponent(url)}`;
 }
 
 export function SupportsMessenger({
@@ -568,11 +574,11 @@ function Bubble({ m, theme: t, accent, assistantName }: {
       {atts.map((a, i) => (
         <View key={i} style={{ marginTop: 6 }}>
           {a.kind === "image" ? (
-            <Image source={{ uri: a.url }} style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: t.surface }} resizeMode="cover" />
+            <Image source={{ uri: mediaSrc(a.url) }} style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: t.surface }} resizeMode="cover" />
           ) : ExpoVideo ? (
             <View style={{ width: 220, height: 220, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" }}>
               <ExpoVideo
-                source={{ uri: a.url }}
+                source={{ uri: mediaSrc(a.url) }}
                 style={{ width: "100%", height: "100%" }}
                 useNativeControls
                 resizeMode={ExpoVideoResizeMode}
@@ -580,7 +586,7 @@ function Bubble({ m, theme: t, accent, assistantName }: {
             </View>
           ) : (
             <TouchableOpacity
-              onPress={() => Linking.openURL(a.url).catch(() => {})}
+              onPress={() => Linking.openURL(mediaSrc(a.url)).catch(() => {})}
               style={[styles.videoBubble, { backgroundColor: t.surface, borderColor: t.border }]}
             >
               <Text style={{ color: t.mutedText }}>▶ Tap to play video</Text>
