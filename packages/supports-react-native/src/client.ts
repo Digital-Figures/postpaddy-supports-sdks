@@ -111,7 +111,14 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
 
   return {
     async bootstrap(): Promise<WidgetConfig> {
-      return call<WidgetConfig>("widget-bootstrap", { widget_id: opts.widgetId });
+      // widget-bootstrap is a GET with query params (same pattern as widget-resume).
+      const url = `${fnBase}/widget-bootstrap?widget_id=${encodeURIComponent(opts.widgetId)}`;
+      const res = await fetchImpl(url, { headers: baseHeaders });
+      const text = await res.text();
+      let json: any = {};
+      try { json = text ? JSON.parse(text) : {}; } catch { /* not json */ }
+      if (!res.ok) throw new Error(json?.error || `widget-bootstrap failed (${res.status})`);
+      return json as WidgetConfig;
     },
 
     async identify(input: IdentifyInput): Promise<void> {
@@ -216,15 +223,20 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
           uploaded.push(await uploadAttachment(visitorToken, a));
         }
       }
-      const res = await call<{ message: Message; ai_message?: Message | null }>(
+      // The backend (`widget-send-message`) returns `{ reply, escalation }` —
+      // it does NOT echo the persisted visitor message or AI message rows.
+      // The actual Message rows arrive via subscribeMessages() (realtime).
+      // We just acknowledge here and surface the reply text + escalation flag
+      // so callers can show optimistic UI / handoff hints if they want to.
+      const res = await call<{ reply: string | null; escalation?: unknown; escalated?: boolean }>(
         "widget-send-message",
         { message: text ?? "", attachments: uploaded },
         { "x-visitor-token": visitorToken },
       );
-      const message = res?.message && typeof res.message.id === "string" ? res.message : null;
-      if (!message) throw new Error("widget-send-message returned no message");
-      const ai = res?.ai_message && typeof res.ai_message.id === "string" ? res.ai_message : null;
-      return { message, aiMessage: ai };
+      return {
+        reply: res?.reply ?? null,
+        escalated: !!(res?.escalated ?? (res?.escalation && (res.escalation as any) !== null)),
+      };
     },
 
     async setLanguage(visitorToken, language) {

@@ -66,15 +66,16 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
     if (!tok) throw new Error("Conversation not ready");
     setState(s => ({ ...s, sending: true, error: null }));
     try {
-      const { message } = await client.sendMessage({ visitorToken: tok, text, attachments });
-      upsertMessage(message);
+      // Backend doesn't echo the persisted rows — both the visitor message
+      // and the AI reply arrive via subscribeMessages() (realtime).
+      await client.sendMessage({ visitorToken: tok, text, attachments });
     } catch (e: any) {
       setState(s => ({ ...s, error: e?.message ?? String(e) }));
       throw e;
     } finally {
       setState(s => ({ ...s, sending: false }));
     }
-  }, [client, upsertMessage]);
+  }, [client]);
 
   const setLanguage = useCallback(async (lang: string) => {
     const tok = visitorTokenRef.current;

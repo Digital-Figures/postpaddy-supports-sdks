@@ -123,12 +123,18 @@ export interface SupportsClient {
   listTickets(visitorToken: string): Promise<{ tickets: WidgetTicket[]; visible: boolean }>;
   /** Load full message history for a conversation. */
   loadHistory(visitorToken: string): Promise<{ conversation_id: string; messages: Message[] }>;
-  /** Send a message (text and/or attachments). Local file URIs are uploaded first. */
+  /**
+   * Send a message (text and/or attachments). Local file URIs are uploaded first.
+   *
+   * NOTE: The persisted visitor message and the AI reply are NOT returned here.
+   * They arrive via `subscribeMessages()` (realtime). This call only returns
+   * the AI's reply text (if any) and whether the conversation was escalated.
+   */
   sendMessage(args: {
     visitorToken: string;
     text?: string;
     attachments?: AttachmentInput[];
-  }): Promise<{ message: Message; aiMessage?: Message | null }>;
+  }): Promise<{ reply: string | null; escalated: boolean }>;
   /** Set the visitor's preferred language for a conversation. */
   setLanguage(visitorToken: string, language: string): Promise<void>;
   /** Subscribe to realtime message inserts/updates for a conversation. */
