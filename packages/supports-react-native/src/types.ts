@@ -2,18 +2,15 @@
 // If you change a field here, make the corresponding edge-function change too.
 
 export type SupportsClientOptions = {
-  /** Postpaddy widget id (from your dashboard). The ONLY required option. */
+  /** Postpaddy widget id (created in the dashboard, public-safe). */
   widgetId: string;
-  /** Optional override for a custom/self-hosted Supports backend. */
-  supabaseUrl?: string;
-  /** Optional override for a custom/self-hosted Supports anon key. */
-  supabaseAnonKey?: string;
-  /**
-   * Optional storage override. Defaults to AsyncStorage on RN (bundled),
-   * falls back to in-memory if AsyncStorage isn't available.
-   */
+  /** Supabase project URL — e.g. https://<ref>.supabase.co. Public-safe. */
+  supabaseUrl: string;
+  /** Supabase publishable/anon key — public-safe. */
+  supabaseAnonKey: string;
+  /** Persistence adapter for the visitor's `contact_token`. Defaults to in-memory. */
   storage?: SupportsStorage;
-  /** Optional fetch override (polyfill, telemetry, custom timeouts). */
+  /** Optional override for fetch (e.g. polyfill, telemetry). */
   fetch?: typeof fetch;
 };
 
