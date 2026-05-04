@@ -5,7 +5,8 @@
     "packages/supports-react-native"
   ],
   "scripts": {
-    "build:react-native": "npm --workspace @postpaddy/supports-react-native run build",
+    "build": "npm run build:react-native",
+    "build:react-native": "npm --workspace @postpaddy/supports-react-native run typecheck",
     "publish:react-native": "npm --workspace @postpaddy/supports-react-native publish --access public",
     "check:react-native-pack": "npm --workspace @postpaddy/supports-react-native pack --dry-run"
   }

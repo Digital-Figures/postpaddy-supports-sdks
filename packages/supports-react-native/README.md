@@ -170,9 +170,27 @@ return `AttachmentInput[]` you can pass to `sendMessage` yourself:
 ```ts
 import { pickImage } from "@postpaddy/supports-react-native";
 
-const attachments = await pickImage({ multiple: true });
-await client.sendMessage({ visitorToken, text: "Here's the receipt", attachments });
+// Multi-select up to 10 images in one go
+const attachments = await pickImage({ multiple: true, selectionLimit: 10 });
+await client.sendMessage({ visitorToken, text: "Here are the receipts", attachments });
 ```
+
+### Multiple attachments per message
+
+Yes — multiple images (and mixed image + video) in a single message are
+fully supported end-to-end:
+
+- `pickImage({ multiple: true, selectionLimit: N })` returns up to N assets
+  in one picker session.
+- `client.sendMessage({ attachments })` accepts the full array; each file
+  is uploaded to GCS in parallel, then the message is persisted with all
+  attachments attached.
+- The built-in `<SupportsMessenger />` composer lets the visitor stack up
+  to **10 attachments** before tapping send — tap the 📎 button repeatedly
+  to add more, tap × on a thumbnail to remove one.
+- Both bubble renderers (`<SupportsMessenger />` and `<SupportsChat />`)
+  render every attachment in the message, so a multi-image send appears as
+  a stack of images inside one bubble.
 
 Permission prompts and HEIC → JPEG conversion are handled for you. Bring
 your own picker (PHPicker, `react-native-image-picker`, etc.) by skipping

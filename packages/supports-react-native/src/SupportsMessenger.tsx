@@ -9,8 +9,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, ActivityIndicator,
-  Image, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, type ViewStyle,
+  Image, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Linking, type ViewStyle,
 } from "react-native";
+
+// Optional video player. Apps that install `expo-av` (or `expo-video`) get an
+// inline player; otherwise we fall back to a tap-to-open card.
+let ExpoVideo: any = null;
+let ExpoVideoResizeMode: any = "contain";
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const av = require("expo-av");
+  ExpoVideo = av?.Video ?? null;
+  ExpoVideoResizeMode = av?.ResizeMode?.CONTAIN ?? "contain";
+} catch {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const v = require("expo-video");
+    ExpoVideo = v?.VideoView ?? v?.Video ?? null;
+  } catch { /* not installed — that's fine */ }
+}
 import { useSupports } from "./SupportsProvider";
 import type {
   AttachmentInput, Conversation, Message, StartConversationInput,
@@ -91,6 +108,10 @@ export function SupportsMessenger({
   const listRef = useRef<FlatList<Message>>(null);
 
   // Bootstrap: fetch brand config + load past conversations if any.
+  // Always land on the Conversations screen so the visitor can either resume
+  // an existing thread or tap "Start a new conversation". A first-time
+  // anonymous visitor sees the same screen with an empty list — never gets
+  // dropped straight into a chat.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -104,12 +125,9 @@ export function SupportsMessenger({
             const list = await client.listConversations();
             if (cancelled) return;
             setConversations(list);
-            setScreen({ name: "conversations" });
-            return;
-          } catch { /* fall through to fresh start */ }
+          } catch { /* show empty list */ }
         }
-        // Anonymous / first-time visitor: jump straight into a new chat.
-        await openNewChat(true);
+        if (!cancelled) setScreen({ name: "conversations" });
       } catch (e: any) {
         if (!cancelled) setScreen({ name: "error", message: e?.message ?? String(e) });
       }
@@ -172,10 +190,19 @@ export function SupportsMessenger({
     if (!m || typeof m.id !== "string") return;
     setMessages(prev => {
       // If a real DB row arrives that matches a local optimistic placeholder
-      // (same sender + same content), replace the placeholder in place.
+      // (same sender + same content), replace ONE placeholder in place. We
+      // only consume one placeholder per real row so multi-attachment sends
+      // (which produce N rows from one placeholder, or 1 placeholder per
+      // attachment from the SDK side) don't all collide on the same slot.
       const isReal = !m.id.startsWith("local_");
       let working = prev;
       if (isReal) {
+        // Skip if this real id is already in the list (re-entrant realtime
+        // + history reload + 5s polling can all race on the same row).
+        if (working.some(x => x.id === m.id)) {
+          // still merge any newer fields
+          return dedupeById(working.map(x => x.id === m.id ? { ...x, ...m } : x));
+        }
         const placeholderIdx = working.findIndex(x =>
           x.id.startsWith("local_") &&
           x.sender === m.sender &&
@@ -184,15 +211,35 @@ export function SupportsMessenger({
         if (placeholderIdx !== -1) {
           working = working.slice();
           working[placeholderIdx] = { ...working[placeholderIdx], ...m };
-          return working;
+          return dedupeById(working);
         }
       }
       const idx = working.findIndex(x => x.id === m.id);
-      if (idx === -1) return [...working, m];
+      if (idx === -1) return dedupeById([...working, m]);
       const next = working.slice();
       next[idx] = { ...next[idx], ...m };
-      return next;
+      return dedupeById(next);
     });
+  }
+
+  // Final safety net: collapse any duplicate ids that slipped through due to
+  // concurrent setState batches (realtime INSERT + post-send loadHistory +
+  // 5s polling can all land in the same render window from different async
+  // contexts, where each batch sees a stale `prev`). Keeps the first entry
+  // and merges later occurrences into it so we never produce duplicate keys.
+  function dedupeById(list: Message[]): Message[] {
+    const seen = new Map<string, number>();
+    const out: Message[] = [];
+    for (const m of list) {
+      const i = seen.get(m.id);
+      if (i === undefined) {
+        seen.set(m.id, out.length);
+        out.push(m);
+      } else {
+        out[i] = { ...out[i], ...m };
+      }
+    }
+    return out;
   }
 
   useEffect(() => {
@@ -297,7 +344,7 @@ export function SupportsMessenger({
         theme={t}
         title={screen.name === "tickets" ? "Tickets" : (config?.assistant_name ?? "Support")}
         subtitle={screen.name === "chat" ? "AI agent" : null}
-        showBack={screen.name === "chat" && conversations.length > 0}
+        showBack={screen.name === "chat"}
         onBack={() => { unsubRef.current?.(); unsubRef.current = null; refreshConversations(); setScreen({ name: "conversations" }); }}
         onClose={onClose}
       />
@@ -522,10 +569,22 @@ function Bubble({ m, theme: t, accent, assistantName }: {
         <View key={i} style={{ marginTop: 6 }}>
           {a.kind === "image" ? (
             <Image source={{ uri: a.url }} style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: t.surface }} resizeMode="cover" />
-          ) : (
-            <View style={[styles.videoBubble, { backgroundColor: t.surface, borderColor: t.border }]}>
-              <Text style={{ color: t.mutedText }}>▶ Video attachment</Text>
+          ) : ExpoVideo ? (
+            <View style={{ width: 220, height: 220, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" }}>
+              <ExpoVideo
+                source={{ uri: a.url }}
+                style={{ width: "100%", height: "100%" }}
+                useNativeControls
+                resizeMode={ExpoVideoResizeMode}
+              />
             </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => Linking.openURL(a.url).catch(() => {})}
+              style={[styles.videoBubble, { backgroundColor: t.surface, borderColor: t.border }]}
+            >
+              <Text style={{ color: t.mutedText }}>▶ Tap to play video</Text>
+            </TouchableOpacity>
           )}
         </View>
       ))}
