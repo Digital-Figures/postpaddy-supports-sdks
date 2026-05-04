@@ -12,21 +12,25 @@ import {
   Image, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Linking, Modal, type ViewStyle,
 } from "react-native";
 
-// Optional video player. Apps that install `expo-av` (or `expo-video`) get an
-// inline player; otherwise we fall back to a tap-to-open card.
+// Optional video player. Apps that install `expo-av` get inline playback;
+// otherwise we fall back to a tap-to-open card.
 let ExpoVideo: any = null;
 let ExpoVideoResizeMode: any = "contain";
+let getVideoThumbnailAsync: ((uri: string, options?: { time?: number }) => Promise<{ uri: string }>) | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const av = require("expo-av");
   ExpoVideo = av?.Video ?? null;
   ExpoVideoResizeMode = av?.ResizeMode?.CONTAIN ?? "contain";
 } catch {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const v = require("expo-video");
-    ExpoVideo = v?.VideoView ?? v?.Video ?? null;
-  } catch { /* not installed — that's fine */ }
+  /* optional dependency not installed */
+}
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const thumbs = require("expo-video-thumbnails");
+  getVideoThumbnailAsync = thumbs?.getThumbnailAsync ?? null;
+} catch {
+  /* optional dependency not installed */
 }
 import { useSupports } from "./SupportsProvider";
 import { SUPPORTS_SUPABASE_URL } from "./config";
@@ -90,6 +94,64 @@ function relativeTime(iso?: string | null) {
 function mediaSrc(url: string): string {
   if (!/^https?:\/\//i.test(url)) return url;
   return `${SUPPORTS_SUPABASE_URL}/functions/v1/chat-media?url=${encodeURIComponent(url)}`;
+}
+
+function VideoAttachment({
+  url,
+  theme,
+}: {
+  url: string;
+  theme: Required<SupportsMessengerTheme>;
+}) {
+  const src = mediaSrc(url);
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!getVideoThumbnailAsync) return;
+    getVideoThumbnailAsync(src, { time: 1000 })
+      .then((result) => {
+        if (!cancelled) setThumbUrl(result?.uri ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setThumbUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  if (ExpoVideo) {
+    return (
+      <View style={{ width: 220, height: 220, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" }}>
+        <ExpoVideo
+          source={{ uri: src }}
+          style={{ width: "100%", height: "100%" }}
+          useNativeControls
+          resizeMode={ExpoVideoResizeMode}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      onPress={() => Linking.openURL(src).catch(() => {})}
+      style={[styles.videoCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      activeOpacity={0.85}
+    >
+      {thumbUrl ? (
+        <Image source={{ uri: thumbUrl }} style={styles.videoThumb} resizeMode="cover" />
+      ) : (
+        <View style={[styles.videoThumb, styles.videoThumbFallback]}>
+          <Text style={{ color: "#fff", fontSize: 34 }}>▶</Text>
+        </View>
+      )}
+      <View style={styles.videoOverlay}>
+        <Text style={styles.videoOverlayText}>Play video</Text>
+      </View>
+    </TouchableOpacity>
+  );
 }
 
 export function SupportsMessenger({
@@ -602,22 +664,8 @@ function Bubble({ m, theme: t, accent, assistantName, onOpenImage }: {
             <TouchableOpacity activeOpacity={0.9} onPress={() => onOpenImage(mediaSrc(a.url))}>
               <Image source={{ uri: mediaSrc(a.url) }} style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: t.surface }} resizeMode="cover" />
             </TouchableOpacity>
-          ) : ExpoVideo ? (
-            <View style={{ width: 220, height: 220, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" }}>
-              <ExpoVideo
-                source={{ uri: mediaSrc(a.url) }}
-                style={{ width: "100%", height: "100%" }}
-                useNativeControls
-                resizeMode={ExpoVideoResizeMode}
-              />
-            </View>
           ) : (
-            <TouchableOpacity
-              onPress={() => Linking.openURL(mediaSrc(a.url)).catch(() => {})}
-              style={[styles.videoBubble, { backgroundColor: t.surface, borderColor: t.border }]}
-            >
-              <Text style={{ color: t.mutedText }}>▶ Tap to play video</Text>
-            </TouchableOpacity>
+            <VideoAttachment url={a.url} theme={t} />
           )}
         </View>
       ))}
@@ -644,6 +692,11 @@ const styles = StyleSheet.create({
   ticketRow: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 12, borderWidth: 1 },
   bubble: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
   videoBubble: { width: 220, padding: 16, borderRadius: 12, borderWidth: 1, alignItems: "center" },
+  videoCard: { width: 220, height: 220, borderRadius: 12, borderWidth: 1, overflow: "hidden" },
+  videoThumb: { width: "100%", height: "100%" },
+  videoThumbFallback: { alignItems: "center", justifyContent: "center", backgroundColor: "#111827" },
+  videoOverlay: { position: "absolute", left: 0, right: 0, bottom: 0, paddingVertical: 10, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center" },
+  videoOverlayText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1 },
   input: { flex: 1, minHeight: 40, maxHeight: 120, paddingHorizontal: 8, paddingVertical: 8, fontSize: 14 },
   iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },

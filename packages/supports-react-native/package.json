@@ -1,6 +1,6 @@
 {
   "name": "@postpaddy/supports-react-native",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "React Native SDK for Postpaddy Supports — chat, attachments, realtime. Drop-in: just your widget id.",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -18,12 +18,14 @@
     "react-native": ">=0.71",
     "@supabase/supabase-js": ">=2.45.0",
     "expo-image-picker": ">=14.0.0",
-    "expo-av": ">=13.0.0"
+    "expo-av": ">=13.0.0",
+    "expo-video-thumbnails": ">=8.0.0"
   },
   "peerDependenciesMeta": {
     "@supabase/supabase-js": { "optional": true },
     "expo-image-picker": { "optional": true },
-    "expo-av": { "optional": true }
+    "expo-av": { "optional": true },
+    "expo-video-thumbnails": { "optional": true }
   },
   "devDependencies": {
     "typescript": "^5.4.0",

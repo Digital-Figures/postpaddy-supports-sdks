@@ -13,17 +13,21 @@ import type { AttachmentInput, Message, StartConversationInput } from "./types";
 
 let ExpoVideo: any = null;
 let ExpoVideoResizeMode: any = "contain";
+let getVideoThumbnailAsync: ((uri: string, options?: { time?: number }) => Promise<{ uri: string }>) | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const av = require("expo-av");
   ExpoVideo = av?.Video ?? null;
   ExpoVideoResizeMode = av?.ResizeMode?.CONTAIN ?? "contain";
 } catch {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const v = require("expo-video");
-    ExpoVideo = v?.VideoView ?? v?.Video ?? null;
-  } catch { /* optional dependency not installed */ }
+  /* optional dependency not installed */
+}
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const thumbs = require("expo-video-thumbnails");
+  getVideoThumbnailAsync = thumbs?.getThumbnailAsync ?? null;
+} catch {
+  /* optional dependency not installed */
 }
 
 export type SupportsChatTheme = {
@@ -53,6 +57,64 @@ const defaultTheme: Required<SupportsChatTheme> = {
 function mediaSrc(url: string): string {
   if (!/^https?:\/\//i.test(url)) return url;
   return `${SUPPORTS_SUPABASE_URL}/functions/v1/chat-media?url=${encodeURIComponent(url)}`;
+}
+
+function VideoAttachment({
+  url,
+  theme,
+}: {
+  url: string;
+  theme: Required<SupportsChatTheme>;
+}) {
+  const src = mediaSrc(url);
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!getVideoThumbnailAsync) return;
+    getVideoThumbnailAsync(src, { time: 1000 })
+      .then((result) => {
+        if (!cancelled) setThumbUrl(result?.uri ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setThumbUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  if (ExpoVideo) {
+    return (
+      <View style={{ width: 220, height: 220, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" }}>
+        <ExpoVideo
+          source={{ uri: src }}
+          style={{ width: "100%", height: "100%" }}
+          useNativeControls
+          resizeMode={ExpoVideoResizeMode}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      onPress={() => Linking.openURL(src).catch(() => {})}
+      style={[styles.videoCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      activeOpacity={0.85}
+    >
+      {thumbUrl ? (
+        <Image source={{ uri: thumbUrl }} style={styles.videoThumb} resizeMode="cover" />
+      ) : (
+        <View style={[styles.videoThumb, styles.videoThumbFallback]}>
+          <Text style={{ color: "#fff", fontSize: 34 }}>▶</Text>
+        </View>
+      )}
+      <View style={styles.videoOverlay}>
+        <Text style={styles.videoOverlayText}>Play video</Text>
+      </View>
+    </TouchableOpacity>
+  );
 }
 
 export type SupportsChatProps = {
@@ -226,22 +288,8 @@ function Bubble({
                 resizeMode="cover"
               />
             </TouchableOpacity>
-          ) : ExpoVideo ? (
-            <View style={{ width: 220, height: 220, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" }}>
-              <ExpoVideo
-                source={{ uri: mediaSrc(a.url) }}
-                style={{ width: "100%", height: "100%" }}
-                useNativeControls
-                resizeMode={ExpoVideoResizeMode}
-              />
-            </View>
           ) : (
-            <TouchableOpacity
-              onPress={() => Linking.openURL(mediaSrc(a.url)).catch(() => {})}
-              style={[styles.videoBubble, { backgroundColor: theme.surface, borderColor: theme.border }]}
-            >
-              <Text style={{ color: theme.mutedText, fontSize: 12 }}>▶ Video attachment</Text>
-            </TouchableOpacity>
+            <VideoAttachment url={a.url} theme={theme} />
           )}
         </View>
       ))}
@@ -253,6 +301,11 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   bubble: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 },
   videoBubble: { width: 220, padding: 16, borderRadius: 12, borderWidth: 1, alignItems: "center" },
+  videoCard: { width: 220, height: 220, borderRadius: 12, borderWidth: 1, overflow: "hidden" },
+  videoThumb: { width: "100%", height: "100%" },
+  videoThumbFallback: { alignItems: "center", justifyContent: "center", backgroundColor: "#111827" },
+  videoOverlay: { position: "absolute", left: 0, right: 0, bottom: 0, paddingVertical: 10, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center" },
+  videoOverlayText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, padding: 8, borderTopWidth: 1 },
   input: { flex: 1, minHeight: 40, maxHeight: 120, borderWidth: 1, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 },
   iconBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center" },
