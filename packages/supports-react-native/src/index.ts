@@ -23,8 +23,14 @@ export type {
   RealtimeUnsubscribe,
 } from "./types";
 
-export { SupportsProvider, useSupports } from "./SupportsProvider";
+export { SupportsProvider, useSupports, useSupportsNotifications } from "./SupportsProvider";
+export type { SupportsProviderOptions, SupportsNotificationOptions, NotificationMode } from "./SupportsProvider";
 export { useConversation } from "./useConversation";
+export { useUnread } from "./useUnread";
+export type { UnreadState } from "./useUnread";
+export { PeekBubble, LauncherBadge } from "./PeekBubble";
+export type { PeekBubbleProps } from "./PeekBubble";
+export { playNotificationSound, triggerNotificationHaptic } from "./notify";
 export { SupportsChat } from "./SupportsChat";
 export type { SupportsChatTheme, SupportsChatProps } from "./SupportsChat";
 export { SupportsMessenger } from "./SupportsMessenger";

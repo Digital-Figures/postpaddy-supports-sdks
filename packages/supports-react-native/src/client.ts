@@ -203,17 +203,25 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
     },
 
     async loadHistory(visitorToken: string) {
-      const res = await call<{ conversation_id: string; messages: Message[] }>(
+      const res = await call<{ conversation_id: string; messages: Message[]; visitor_last_seen_at?: string | null }>(
         "widget-history",
         {},
         { "x-visitor-token": visitorToken },
       );
-      // Defensive: backend has occasionally returned null entries / messages
-      // missing an id. Filter them out so consumers can safely keyExtract.
       const messages = Array.isArray(res?.messages)
         ? res.messages.filter((m): m is Message => !!m && typeof m.id === "string")
         : [];
-      return { conversation_id: res?.conversation_id, messages };
+      return {
+        conversation_id: res?.conversation_id,
+        messages,
+        visitor_last_seen_at: res?.visitor_last_seen_at ?? null,
+      };
+    },
+
+    async markSeen(visitorToken: string) {
+      return await call<{ visitor_last_seen_at: string }>(
+        "widget-mark-seen", {}, { "x-visitor-token": visitorToken },
+      );
     },
 
     async sendMessage({ visitorToken, text, attachments }) {

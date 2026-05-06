@@ -40,6 +40,9 @@ export type WidgetConfig = {
   brand_color?: string | null;
   assistant_name?: string | null;
   identity_fields?: { name?: boolean; email?: boolean; phone?: boolean; company?: boolean };
+  /** Brand-level notification defaults (set in dashboard). */
+  notifications_peek_enabled?: boolean;
+  notifications_sound_default?: "ask" | "on" | "off";
 };
 
 export type IdentifyInput = {
@@ -122,7 +125,9 @@ export interface SupportsClient {
   /** List the visitor's tickets (requires an active visitor token). */
   listTickets(visitorToken: string): Promise<{ tickets: WidgetTicket[]; visible: boolean }>;
   /** Load full message history for a conversation. */
-  loadHistory(visitorToken: string): Promise<{ conversation_id: string; messages: Message[] }>;
+  loadHistory(visitorToken: string): Promise<{ conversation_id: string; messages: Message[]; visitor_last_seen_at: string | null }>;
+  /** Mark the conversation as seen for the visitor (clears unread badge). */
+  markSeen(visitorToken: string): Promise<{ visitor_last_seen_at: string }>;
   /**
    * Send a message (text and/or attachments). Local file URIs are uploaded first.
    *

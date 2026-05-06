@@ -25,6 +25,18 @@ npm i @supabase/supabase-js
 npx expo install expo-image-picker
 ```
 
+Two more optional Expo packages enable the new-message notification polish:
+
+```sh
+# Soft notification tone when a support reply arrives
+npx expo install expo-av
+
+# Light haptic tap on supported devices
+npx expo install expo-haptics
+```
+
+If either package is missing, the SDK still works and simply skips that effect.
+
 You don't need an API key. The SDK ships with the Postpaddy backend URL baked
 in. The only thing you provide is your **widget id** (find it in your
 Postpaddy dashboard → **Messenger → Install**, the same id the web widget uses).
@@ -80,6 +92,76 @@ If you only want the chat surface inside your own screen:
   <SupportsChat onPickAttachment={() => pickImage()} />
 </SupportsProvider>
 ```
+
+---
+
+## New-message notifications
+
+The SDK can show the same polished "Reply from Support..." peek bubble as the
+web widget while your chat UI is closed. It uses the brand color from your
+dashboard, coalesces bursts into one bubble with `+N`, auto-dismisses after 6
+seconds, and keeps the unread badge until the chat opens.
+
+Use the built-in pieces when you render your own launcher:
+
+```tsx
+import {
+  LauncherBadge,
+  PeekBubble,
+  SupportsProvider,
+  useUnread,
+} from "@postpaddy/supports-react-native";
+
+function SupportLauncher({ conversationId, visitorToken, openChat, isOpen }) {
+  const unread = useUnread({ conversationId, visitorToken, isOpen });
+
+  return (
+    <>
+      <PeekBubble
+        message={unread.latestMessage}
+        unreadCount={unread.count}
+        brandColor="#149DFF"
+        onOpen={() => {
+          unread.markSeen(visitorToken);
+          openChat();
+        }}
+      />
+
+      <Pressable onPress={openChat}>
+        <Text>Support</Text>
+        <LauncherBadge count={unread.count} color="#149DFF" />
+      </Pressable>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <SupportsProvider
+      options={{
+        widgetId: "wgt_xxx",
+        notifications: {
+          peek: true,
+          sound: "ask",  // "ask" | "on" | "off"
+          haptic: "ask", // "ask" | "on" | "off"
+        },
+      }}
+    >
+      <SupportLauncher />
+    </SupportsProvider>
+  );
+}
+```
+
+`sound: "ask"` and `haptic: "ask"` show a one-time inline prompt on the first
+incoming message. The visitor's choice is persisted locally and is not asked
+again. Brand admins can also set defaults in Postpaddy dashboard -> Messenger
+-> Chat notifications; pass explicit provider options if your app needs to
+override those defaults.
+
+Call `unread.markSeen()` when the chat opens or when the visitor taps the peek
+bubble. That updates the backend via `widget-mark-seen`, clears local unread
+state, and keeps unread behavior consistent across sessions.
 
 ---
 
@@ -241,6 +323,7 @@ const opened = await client.openConversation(list[0].id);
 | `openConversation(id)` | `POST /widget-open-conversation` |
 | `listConversations()` | `GET /widget-resume?widget_id=…&contact_token=…` |
 | `loadHistory(visitorToken)` | `POST /widget-history` |
+| `markSeen(visitorToken)` | `POST /widget-mark-seen` |
 | `sendMessage({ visitorToken, text, attachments })` | `POST /chat-upload-sign` (per file) → `PUT` to GCS → `POST /widget-send-message` |
 | `setLanguage(visitorToken, lang)` | `POST /widget-set-language` |
 | `listTickets(visitorToken)` | `POST /widget-tickets` |
