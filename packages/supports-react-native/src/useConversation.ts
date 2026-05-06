@@ -22,10 +22,27 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
   const visitorTokenRef = useRef<string | null>(null);
 
   const upsertMessage = useCallback((m: Message) => {
+    if (!m || typeof m.id !== "string") return;
     setState(s => {
-      const idx = s.messages.findIndex(x => x.id === m.id);
-      if (idx === -1) return { ...s, messages: [...s.messages, m] };
-      const next = s.messages.slice();
+      // Reconcile real DB row with an existing local placeholder of the same
+      // sender + content (added by send() for instant UI feedback).
+      const isReal = !m.id.startsWith("local_");
+      let arr = s.messages;
+      if (isReal) {
+        const ph = arr.findIndex(x =>
+          x.id.startsWith("local_") &&
+          x.sender === m.sender &&
+          (x.content ?? "") === (m.content ?? "")
+        );
+        if (ph !== -1) {
+          arr = arr.slice();
+          arr[ph] = { ...arr[ph], ...m };
+          return { ...s, messages: arr };
+        }
+      }
+      const idx = arr.findIndex(x => x.id === m.id);
+      if (idx === -1) return { ...s, messages: [...arr, m] };
+      const next = arr.slice();
       next[idx] = { ...next[idx], ...m };
       return { ...s, messages: next };
     });
@@ -47,7 +64,7 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
         setState({
           loading: false, sending: false, error: null,
           conversation: { ...opened.conversation, id: hist.conversation_id },
-          messages: hist.messages ?? [],
+          messages: (hist.messages ?? []).filter((m): m is Message => !!m && typeof m.id === "string"),
         });
         unsub = client.subscribeMessages(hist.conversation_id, (m) => upsertMessage(m));
       } catch (e: any) {
@@ -60,13 +77,55 @@ export function useConversation(initial?: { conversationId?: string; identity?: 
     };
   }, [initial?.conversationId]); // eslint-disable-line
 
+  // Polling fallback: realtime can be silent if @supabase/supabase-js isn't
+  // installed in the host app, or if RLS / publication blocks the subscription.
+  // Without this, agent replies from the dashboard would never arrive.
+  useEffect(() => {
+    const tok = visitorTokenRef.current;
+    if (!tok) return;
+    const id = setInterval(async () => {
+      const t = visitorTokenRef.current;
+      if (!t) return;
+      try {
+        const hist = await client.loadHistory(t);
+        hist.messages.forEach(upsertMessage);
+      } catch { /* ignore */ }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [client, upsertMessage, state.conversation?.id]);
+
   const send = useCallback(async (text: string, attachments?: AttachmentInput[]) => {
     const tok = visitorTokenRef.current;
     if (!tok) throw new Error("Conversation not ready");
     setState(s => ({ ...s, sending: true, error: null }));
+
+    // Optimistic visitor row — instant feedback. Realtime will replace it
+    // when the persisted row arrives (matched in upsertMessage()).
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    upsertMessage({
+      id: localId,
+      conversation_id: "",
+      sender: "customer",
+      sender_name: null,
+      content: text,
+      created_at: new Date().toISOString(),
+      metadata: attachments?.length
+        ? { attachments: attachments.map(a => ({ kind: a.kind, url: a.uri, mime: a.mime })) }
+        : undefined,
+    } as Message);
+
     try {
-      const { message } = await client.sendMessage({ visitorToken: tok, text, attachments });
-      upsertMessage(message);
+      const res = await client.sendMessage({ visitorToken: tok, text, attachments });
+      if (res?.reply) {
+        upsertMessage({
+          id: `local_ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          conversation_id: "",
+          sender: "ai",
+          sender_name: null,
+          content: res.reply,
+          created_at: new Date().toISOString(),
+        } as Message);
+      }
     } catch (e: any) {
       setState(s => ({ ...s, error: e?.message ?? String(e) }));
       throw e;

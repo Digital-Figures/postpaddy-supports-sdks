@@ -1,6 +1,6 @@
 import type { SupportsStorage } from "./types";
 
-/** In-memory fallback. Replace with AsyncStorage in production. */
+/** In-memory fallback (used when AsyncStorage isn't available, e.g. SSR/tests). */
 export function createMemoryStorage(): SupportsStorage {
   const map = new Map<string, string>();
   return {
@@ -11,17 +11,23 @@ export function createMemoryStorage(): SupportsStorage {
 }
 
 /**
- * Wrap @react-native-async-storage/async-storage if you have it installed.
- * Usage: storage: asyncStorageAdapter(require('@react-native-async-storage/async-storage').default)
+ * Default storage on React Native: AsyncStorage (bundled as a dep).
+ * Falls back to in-memory if the module can't be loaded for any reason.
  */
-export function asyncStorageAdapter(asyncStorage: {
-  getItem: (k: string) => Promise<string | null>;
-  setItem: (k: string, v: string) => Promise<void>;
-  removeItem: (k: string) => Promise<void>;
-}): SupportsStorage {
-  return {
-    getItem: (k) => asyncStorage.getItem(k),
-    setItem: (k, v) => asyncStorage.setItem(k, v),
-    removeItem: (k) => asyncStorage.removeItem(k),
-  };
+export function createDefaultStorage(): SupportsStorage {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("@react-native-async-storage/async-storage");
+    const AsyncStorage = mod?.default ?? mod;
+    if (AsyncStorage?.getItem && AsyncStorage?.setItem && AsyncStorage?.removeItem) {
+      return {
+        getItem: (k) => AsyncStorage.getItem(k),
+        setItem: (k, v) => AsyncStorage.setItem(k, v),
+        removeItem: (k) => AsyncStorage.removeItem(k),
+      };
+    }
+  } catch {
+    /* fall through to memory */
+  }
+  return createMemoryStorage();
 }
