@@ -11,24 +11,21 @@ import type {
   AttachmentInput,
   Attachment,
   RealtimeUnsubscribe,
-  WidgetTicket,
 } from "./types";
-import { createDefaultStorage } from "./storage";
-import { SUPPORTS_SUPABASE_URL, SUPPORTS_SUPABASE_ANON_KEY } from "./config";
+import { createMemoryStorage } from "./storage";
 
 const TOKEN_KEY = "postpaddy:supports:contact_token";
 const VUID_KEY = "postpaddy:supports:visitor_uid";
 
 export function createSupportsClient(opts: SupportsClientOptions): SupportsClient {
-  if (!opts?.widgetId) throw new Error("createSupportsClient: `widgetId` is required");
-  const storage = opts.storage ?? createDefaultStorage();
+  const storage = opts.storage ?? createMemoryStorage();
   const fetchImpl = opts.fetch ?? fetch;
-  const fnBase = `${SUPPORTS_SUPABASE_URL}/functions/v1`;
+  const fnBase = `${opts.supabaseUrl.replace(/\/$/, "")}/functions/v1`;
 
   const baseHeaders: Record<string, string> = {
     "content-type": "application/json",
-    apikey: SUPPORTS_SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${SUPPORTS_SUPABASE_ANON_KEY}`,
+    apikey: opts.supabaseAnonKey,
+    Authorization: `Bearer ${opts.supabaseAnonKey}`,
   };
 
   async function call<T>(path: string, body: unknown, extraHeaders?: Record<string, string>): Promise<T> {
@@ -98,7 +95,7 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
     if (_supabase) return _supabase;
     try {
       const mod = await import("@supabase/supabase-js");
-      _supabase = mod.createClient(SUPPORTS_SUPABASE_URL, SUPPORTS_SUPABASE_ANON_KEY, {
+      _supabase = mod.createClient(opts.supabaseUrl, opts.supabaseAnonKey, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
       return _supabase;
@@ -111,14 +108,7 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
 
   return {
     async bootstrap(): Promise<WidgetConfig> {
-      // widget-bootstrap is a GET with query params (same pattern as widget-resume).
-      const url = `${fnBase}/widget-bootstrap?widget_id=${encodeURIComponent(opts.widgetId)}`;
-      const res = await fetchImpl(url, { headers: baseHeaders });
-      const text = await res.text();
-      let json: any = {};
-      try { json = text ? JSON.parse(text) : {}; } catch { /* not json */ }
-      if (!res.ok) throw new Error(json?.error || `widget-bootstrap failed (${res.status})`);
-      return json as WidgetConfig;
+      return call<WidgetConfig>("widget-bootstrap", { widget_id: opts.widgetId });
     },
 
     async identify(input: IdentifyInput): Promise<void> {
@@ -141,10 +131,6 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
     async startConversation(input?: StartConversationInput) {
       const contact_token = await getContactToken();
       const visitor_uid = await getOrCreateVisitorUid();
-      const merged: StartConversationInput = {
-        ...(opts.defaultLanguage ? { preferred_language: opts.defaultLanguage } : {}),
-        ...(input ?? {}),
-      };
       const res = await call<{
         visitor_token: string;
         conversation_id: string;
@@ -154,7 +140,7 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
         widget_id: opts.widgetId,
         visitor_uid,
         ...(contact_token ? { contact_token } : {}),
-        ...merged,
+        ...(input ?? {}),
       });
       if (res.contact_token) await storage.setItem(TOKEN_KEY, res.contact_token);
       return {
@@ -187,33 +173,19 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
     async listConversations(): Promise<Conversation[]> {
       const contact_token = await getContactToken();
       if (!contact_token) throw new Error("Call identify() before listConversations()");
-      // widget-resume is a GET with query params (matches the web widget).
-      const url = `${fnBase}/widget-resume?widget_id=${encodeURIComponent(opts.widgetId)}&contact_token=${encodeURIComponent(contact_token)}`;
-      const res = await fetchImpl(url, { headers: baseHeaders });
-      const json: any = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error || `widget-resume failed (${res.status})`);
-      return (json?.conversations ?? []) as Conversation[];
-    },
-
-    async listTickets(visitorToken: string) {
-      const res = await call<{ tickets: WidgetTicket[]; visible: boolean }>(
-        "widget-tickets", {}, { "x-visitor-token": visitorToken },
-      );
-      return { tickets: res?.tickets ?? [], visible: !!res?.visible };
+      const res = await call<{ conversations: Conversation[] }>("widget-resume", {
+        widget_id: opts.widgetId,
+        contact_token,
+      });
+      return res.conversations ?? [];
     },
 
     async loadHistory(visitorToken: string) {
-      const res = await call<{ conversation_id: string; messages: Message[] }>(
+      return call<{ conversation_id: string; messages: Message[] }>(
         "widget-history",
         {},
         { "x-visitor-token": visitorToken },
       );
-      // Defensive: backend has occasionally returned null entries / messages
-      // missing an id. Filter them out so consumers can safely keyExtract.
-      const messages = Array.isArray(res?.messages)
-        ? res.messages.filter((m): m is Message => !!m && typeof m.id === "string")
-        : [];
-      return { conversation_id: res?.conversation_id, messages };
     },
 
     async sendMessage({ visitorToken, text, attachments }) {
@@ -223,20 +195,12 @@ export function createSupportsClient(opts: SupportsClientOptions): SupportsClien
           uploaded.push(await uploadAttachment(visitorToken, a));
         }
       }
-      // The backend (`widget-send-message`) returns `{ reply, escalation }` —
-      // it does NOT echo the persisted visitor message or AI message rows.
-      // The actual Message rows arrive via subscribeMessages() (realtime).
-      // We just acknowledge here and surface the reply text + escalation flag
-      // so callers can show optimistic UI / handoff hints if they want to.
-      const res = await call<{ reply: string | null; escalation?: unknown; escalated?: boolean }>(
+      const res = await call<{ message: Message; ai_message?: Message | null }>(
         "widget-send-message",
         { message: text ?? "", attachments: uploaded },
         { "x-visitor-token": visitorToken },
       );
-      return {
-        reply: res?.reply ?? null,
-        escalated: !!(res?.escalated ?? (res?.escalation && (res.escalation as any) !== null)),
-      };
+      return { message: res.message, aiMessage: res.ai_message ?? null };
     },
 
     async setLanguage(visitorToken, language) {

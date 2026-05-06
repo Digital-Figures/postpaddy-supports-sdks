@@ -1,38 +1,40 @@
 {
   "name": "@postpaddy/supports-react-native",
-  "version": "0.1.11",
-  "description": "React Native SDK for Postpaddy Supports — chat, attachments, realtime. Drop-in: just your widget id.",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "files": ["src", "README.md"],
+  "version": "0.1.0",
+  "description": "React Native SDK for Postpaddy Supports — chat, attachments, realtime.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "dist",
+    "src",
+    "ios",
+    "android",
+    "*.podspec",
+    "react-native.config.js",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run clean && npm run build"
   },
   "keywords": ["postpaddy", "supports", "chat", "support", "react-native"],
   "license": "MIT",
-  "dependencies": {
-    "@react-native-async-storage/async-storage": "^1.23.0"
-  },
   "peerDependencies": {
     "react": ">=18",
     "react-native": ">=0.71",
-    "@supabase/supabase-js": ">=2.45.0",
-    "expo-image-picker": ">=14.0.0",
-    "expo-av": ">=13.0.0",
-    "expo-video-thumbnails": ">=8.0.0"
+    "@supabase/supabase-js": ">=2.45.0"
   },
   "peerDependenciesMeta": {
-    "@supabase/supabase-js": { "optional": true },
-    "expo-image-picker": { "optional": true },
-    "expo-av": { "optional": true },
-    "expo-video-thumbnails": { "optional": true }
+    "@supabase/supabase-js": { "optional": true }
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/react": "^18.2.0",
-    "react": "^18.2.0",
-    "react-native": "^0.73.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "expo-image-picker": "^14.7.0"
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

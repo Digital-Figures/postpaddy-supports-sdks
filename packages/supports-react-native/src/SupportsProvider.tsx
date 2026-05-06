@@ -15,7 +15,7 @@ export function SupportsProvider({
   const value = useMemo<Ctx>(() => ({
     client: createSupportsClient(options),
     options,
-  }), [options.widgetId]); // eslint-disable-line
+  }), [options.widgetId, options.supabaseUrl, options.supabaseAnonKey]); // eslint-disable-line
   return <SupportsCtx.Provider value={value}>{children}</SupportsCtx.Provider>;
 }
 
